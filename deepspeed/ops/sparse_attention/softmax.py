@@ -186,7 +186,7 @@ class _sparse_softmax(torch.autograd.Function):
                 bench,
                 time):
 
-        apply_scale = False if scale == 1.0 else True
+        apply_scale = scale != 1.0
 
         # handle None rpe
         if rpe is None:
@@ -299,7 +299,7 @@ class Softmax:
         self.layout = layout
         self.block = block
         self.bench = bench
-        self.lut_cache = dict()
+        self.lut_cache = {}
 
     def __call__(self,
                  x,

@@ -58,8 +58,12 @@ class MoE(torch.nn.Module):
 
         assert groups.is_initialized(), \
             'Please call deepspeed.utils.groups.initialize() before using MoE layers'
-        assert noisy_gate_policy is None or noisy_gate_policy in ['None', 'Jitter', 'RSample'], \
-            'Unsupported noisy_gate_policy: ' + noisy_gate_policy
+        assert noisy_gate_policy is None or noisy_gate_policy in [
+            'None',
+            'Jitter',
+            'RSample',
+        ], f'Unsupported noisy_gate_policy: {noisy_gate_policy}'
+
 
         # Get the group name
         max_ep_size = groups.get_max_expert_size()

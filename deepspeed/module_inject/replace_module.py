@@ -541,9 +541,11 @@ def replace_transformer_layer(orig_layer_impl,
                     setattr(
                         r_module,
                         name,
-                        linear_policies[child.__class__](child,
-                                                         prev_name + '.' + name,
-                                                         conv_linear_layer))
+                        linear_policies[child.__class__](
+                            child, f'{prev_name}.{name}', conv_linear_layer
+                        ),
+                    )
+
                 else:
                     update_mp_params(child)
                     _replace_module(child, name)
@@ -554,25 +556,25 @@ def replace_transformer_layer(orig_layer_impl,
     def replace_fn(child, _policy, layer_id=0):
         if training:
             # copy relevant state from child -> new module
-            new_module = replace_with_policy(child,
+            return replace_with_policy(child,
                                              _policy,
                                              triangular_masking,
                                              preln=preln)
 
         else:
             # copy relevant state from child -> new module
-            if replace_with_kernel_inject:
-                new_module = replace_with_policy(child,
-                                                 _policy,
-                                                 triangular_masking,
-                                                 inference=True,
-                                                 preln=(_policy
-                                                        is not HFBertLayerPolicy),
-                                                 layer_id=layer_id)
-            else:
-                new_module = replace_wo_policy(child, _policy)
-
-        return new_module
+            return (
+                replace_with_policy(
+                    child,
+                    _policy,
+                    triangular_masking,
+                    inference=True,
+                    preln=(_policy is not HFBertLayerPolicy),
+                    layer_id=layer_id,
+                )
+                if replace_with_kernel_inject
+                else replace_wo_policy(child, _policy)
+            )
 
     return replace_module(model=model,
                           orig_class=orig_layer_impl,
@@ -660,13 +662,13 @@ def replace_module(model, orig_class, replace_fn, _replace_policy):
     """
     policy = {}
     if orig_class is not None:
-        policy.update({orig_class: (replace_fn, _replace_policy)})
+        policy[orig_class] = (replace_fn, _replace_policy)
     else:
         for plcy in replace_policies:
             # instantiate a throw-away policy in order to populate the _orig_layer_class
             _ = plcy(None)
             if plcy._orig_layer_class is not None:
-                policy.update({plcy._orig_layer_class: (replace_fn, plcy)})
+                policy[plcy._orig_layer_class] = (replace_fn, plcy)
     assert len(policy.items()) > 0,\
         "No default policy found! Please specify your policy injection_policy (like {BertLayer:HFBEertLayerPolicy})." +\
         "You can find some samples here: https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/module_inject/replace_policy.py"

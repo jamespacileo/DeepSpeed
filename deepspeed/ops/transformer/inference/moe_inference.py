@@ -281,13 +281,12 @@ class DeepSpeedMoEInference(nn.Module):
                                     inference_cuda_module.vector_matmul_fp32
 
         config.mp_size = 1
-        self.mlp = nn.ModuleList(
-            DeepSpeedMoEMLP(config,
+        self.mlp = nn.ModuleList(DeepSpeedMoEMLP(config,
                             quantize_scales,
                             quantize_groups,
                             merge_count,
                             mlp_extra_grouping,
-                            expert_mp_group) for i in range(self.config.moe_experts))
+                            expert_mp_group) for _ in range(self.config.moe_experts))
 
         self.moe_gate = TopKGate(self.config.hidden_size,
                                  self.config.global_experts,
@@ -349,14 +348,13 @@ class DeepSpeedMoEInference(nn.Module):
         return expert_outputs
 
     def _alltoall(self, dispatched_attention):
-        if dist.get_world_size(group=self.ep_group) > 1:
-            dispatched_input = torch.empty_like(dispatched_attention)
-            dist.all_to_all_single(dispatched_input,
-                                   dispatched_attention,
-                                   group=self.ep_group)
-            return dispatched_input
-        else:
+        if dist.get_world_size(group=self.ep_group) <= 1:
             return dispatched_attention
+        dispatched_input = torch.empty_like(dispatched_attention)
+        dist.all_to_all_single(dispatched_input,
+                               dispatched_attention,
+                               group=self.ep_group)
+        return dispatched_input
 
     def scale_expert_output(self, attention_output, expert_output, combined_weights):
         combined_output = torch.matmul(
@@ -402,10 +400,10 @@ class DeepSpeedMoEInference(nn.Module):
                                               self.norm_b)
 
             if get_present:
-                attention_output, p_key, p_value = attention_output[0:3]
+                attention_output, p_key, p_value = attention_output[:3]
                 presents = (p_key, p_value)
             elif output_attentions:
-                attention_output, _, _, context_output = attention_output[0:4]
+                attention_output, _, _, context_output = attention_output[:4]
             else:
                 attention_output = attention_output[0]
 

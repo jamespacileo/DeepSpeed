@@ -16,9 +16,7 @@ def has_moe_layers(m):
 
 
 def is_moe_param(param: torch.Tensor) -> bool:
-    if hasattr(param, "allreduce") and not param.allreduce:
-        return True
-    return False
+    return bool(hasattr(param, "allreduce") and not param.allreduce)
 
 
 def split_params_into_shared_and_expert_params(
@@ -84,16 +82,15 @@ def split_params_into_different_moe_groups_for_optimizer(
     for param_group in param_groups:
         group_moe[param_group['name']] = {}
         for key in groups.get_expert_data_parallel_group_dict().keys():
-            group_moe[param_group['name']][key] = {}
-            group_moe[param_group['name']][key]['name'] = key
-            group_moe[param_group['name']][key]['moe'] = True
+            group_moe[param_group['name']][key] = {'name': key, 'moe': True}
             for ori_key in param_group.keys():
-                if ori_key != 'name':
-                    if ori_key == 'params':
-                        group_moe[param_group['name']][key][ori_key] = []
-                    else:
-                        group_moe[
-                            param_group['name']][key][ori_key] = param_group[ori_key]
+                if ori_key == 'name':
+                    pass
+                elif ori_key == 'params':
+                    group_moe[param_group['name']][key][ori_key] = []
+                else:
+                    group_moe[
+                        param_group['name']][key][ori_key] = param_group[ori_key]
     # Assign param
     for param_group in param_groups:
         new_params = []

@@ -27,8 +27,8 @@ def was_interruptted(filename):
     if not os.path.exists(filename):
         return "stderr.log does not exist"
     with open(filename) as f:
+        s = "KeyboardInterrupt"
         for line in f:
-            s = "KeyboardInterrupt"
             idx = line.find(s)
             if idx != -1:
                 return True
@@ -39,8 +39,8 @@ def was_interruptted(filename):
     if not os.path.exists(filename):
         return "stderr.log does not exist"
     with open(filename) as f:
+        s = "KeyboardInterrupt"
         for line in f:
-            s = "KeyboardInterrupt"
             idx = line.find(s)
             if idx != -1:
                 return True
@@ -81,23 +81,19 @@ def find_replace(target, replace_dict):
 
 
 def get_list(val):
-    if not isinstance(val, list):
-        return [val]
-    else:
-        return val
+    return [val] if not isinstance(val, list) else val
 
 
 def combine_dict(d, u):
     for k, v in u.items():
         if isinstance(v, collections.abc.Mapping):
             d[k] = combine_dict(d.get(k, {}), v)
+        elif k not in d:
+            d[k] = v
         else:
-            if k not in d:
-                d[k] = v
-            else:
-                if not isinstance(d[k], list):
-                    d[k] = [d[k]]
-                d[k].extend(i for i in get_list(v) if i not in d[k])
+            if not isinstance(d[k], list):
+                d[k] = [d[k]]
+            d[k].extend(i for i in get_list(v) if i not in d[k])
     return d
 
 
@@ -134,12 +130,13 @@ def replace_dict(d, u, ignored_keys=[]):
 
 
 def get_val_by_key(d: dict, k):
-    if k in d:
-        return d[k]
-    for v in d.values():
-        if isinstance(v, dict):
-            return get_val_by_key(v, k)
-    return None
+    return d.get(
+        k,
+        next(
+            (get_val_by_key(v, k) for v in d.values() if isinstance(v, dict)),
+            None,
+        ),
+    )
 
 
 def set_val_by_key(d: dict, k, vv):
@@ -183,9 +180,7 @@ def fetch_hostfile(hostfile_path):
 
 def validate_ds_config(config: dict):
     def is_False(config: dict, key):
-        if config is None:
-            return False
-        return bool(config.get(key))
+        return False if config is None else bool(config.get(key))
 
     config_zero = config.get("zero_optimization", {})
     if not config_zero:
@@ -331,7 +326,7 @@ def canonical_name(config: dict, tuning_keys=None, prefix="", omit_val=False):
             return "None_"
         for key, val in offload_config.items():
             key = "".join(map(lambda c: c[0], key.split('_')))
-            if (isinstance(val, int) or isinstance(val, float)) and val > 9000:
+            if isinstance(val, (int, float)) and val > 9000:
                 cname += key + '{:.1e}'.format(val) + "_"
             else:
                 if isinstance(val, bool):
@@ -361,22 +356,21 @@ def canonical_name(config: dict, tuning_keys=None, prefix="", omit_val=False):
             if isinstance(val, dict):
                 n = get_name_by_keys(val, tuning_keys, omit_val=omit_val)
                 if n != "":
-                    cname += n + "_"
+                    cname += f'{n}_'
             if tuning_keys and key not in tuning_keys:
                 continue
 
             key_str = "".join(map(lambda c: c[0], key.split('_')))
 
-            if not omit_val:
-                if (isinstance(val, int) or isinstance(val, float)) and val > 9000:
-                    cname += key_str + '{:.1e}'.format(val) + "_"
-                else:
-                    if isinstance(val, bool):
-                        val = "T" if val else "F"
-                    cname += f"{key_str}{val}_"
-            else:
-                cname += key_str + "_"
+            if omit_val:
+                cname += f'{key_str}_'
 
+            elif isinstance(val, (int, float)) and val > 9000:
+                cname += key_str + '{:.1e}'.format(val) + "_"
+            else:
+                if isinstance(val, bool):
+                    val = "T" if val else "F"
+                cname += f"{key_str}{val}_"
         return cname[:-1]
 
     name = get_name_by_keys(config, tuning_keys, omit_val=omit_val)
@@ -427,7 +421,7 @@ def memory_to_string(n, postfix="", units=None, precision=2):
             return str(round(n / 1024**4, precision)) + " " + units
         if units == "G" + postfix:
             return str(round(n / 1024**3, precision)) + " " + units
-        elif units == "M" + postfix:
+        elif units == f'M{postfix}':
             return str(round(n / 1024**2, precision)) + " " + units
         elif units == "K" + postfix:
             return str(round(n / 1024, precision)) + " " + units
@@ -445,12 +439,11 @@ def number_to_string(n, postfix="", units=None, precision=2):
             return str(round(n / 1000**1, precision)) + " K" + postfix
         else:
             return str(n) + " "
+    elif units == f'B{postfix}':
+        return str(round(n / 1000**3, precision)) + " " + units
+    elif units == f'M{postfix}':
+        return str(round(n / 1000**2, precision)) + " " + units
+    elif units == f'K{postfix}':
+        return str(round(n / 1000**1, precision)) + " " + units
     else:
-        if units == "B" + postfix:
-            return str(round(n / 1000**3, precision)) + " " + units
-        elif units == "M" + postfix:
-            return str(round(n / 1000**2, precision)) + " " + units
-        elif units == "K" + postfix:
-            return str(round(n / 1000**1, precision)) + " " + units
-        else:
-            return str(n) + " "
+        return str(n) + " "

@@ -160,6 +160,4 @@ class SparseSelfAttention(nn.Module):
             key_padding_mask_mode=self.key_padding_mask_mode,
             attn_mask_mode=self.attn_mask_mode)
 
-        # outputs
-        attn_output = sparse_dot_dsd_nn(attn_output_weights, value)
-        return attn_output
+        return sparse_dot_dsd_nn(attn_output_weights, value)

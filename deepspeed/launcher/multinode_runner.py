@@ -68,9 +68,9 @@ class PDSHRunner(MultiNodeRunner):
         # See https://linux.die.net/man/1/pdsh for flag details
         pdsh_cmd_args = ['pdsh', '-f', str(PDSH_MAX_FAN_OUT), '-w', active_workers]
 
-        exports = ""
-        for key, val in self.exports.items():
-            exports += f"export {key}={quote(val)}; "
+        exports = "".join(
+            f"export {key}={quote(val)}; " for key, val in self.exports.items()
+        )
 
         # https://linux.die.net/man/1/pdsh
         # %n will be replaced by pdsh command
@@ -211,7 +211,7 @@ class MVAPICHRunner(MultiNodeRunner):
         devices_per_node = self.resource_pool.values()
         total_process_count = sum(devices_per_node)
         process_per_node = list(devices_per_node)[0]
-        if not all([n == process_per_node for n in devices_per_node]):
+        if any(n != process_per_node for n in devices_per_node):
             raise ValueError("mvapich requires same number of devices per node")
 
         with open(MVAPICH_TMP_HOSTFILE, 'w') as fd:

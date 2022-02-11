@@ -70,10 +70,7 @@ def get_file_key(file):
 def get_thread_count(file):
     f, _ = os.path.splitext(os.path.basename(file))
     fields = f.split('_')
-    for key in fields:
-        if key[0] == 't':
-            return int(key[1:])
-    return 1
+    return next((int(key[1:]) for key in fields if key[0] == 't'), 1)
 
 
 """
@@ -104,7 +101,7 @@ def get_metric(file, metric):
 
 
 def validate_args(args):
-    if not args.metric in PERF_METRICS:
+    if args.metric not in PERF_METRICS:
         print(f'{args.metric} is not a valid performance metrics')
         return False
 

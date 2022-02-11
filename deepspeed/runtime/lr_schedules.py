@@ -251,13 +251,10 @@ def get_config_from_args(args):
     if not hasattr(args, LR_SCHEDULE) or args.lr_schedule is None:
         return None, '--{} not specified on command line'.format(LR_SCHEDULE)
 
-    if not args.lr_schedule in VALID_LR_SCHEDULES:
+    if args.lr_schedule not in VALID_LR_SCHEDULES:
         return None, '{} is not supported LR schedule'.format(args.lr_schedule)
 
-    config = {}
-    config['type'] = args.lr_schedule
-    config['params'] = {}
-
+    config = {'type': args.lr_schedule, 'params': {}}
     if args.lr_schedule == LR_RANGE_TEST:
         override_lr_range_test_params(args, config['params'])
     elif args.lr_schedule == ONE_CYCLE:
@@ -269,16 +266,16 @@ def get_config_from_args(args):
 
 
 def get_lr_from_config(config):
-    if not 'type' in config:
+    if 'type' not in config:
         return None, 'LR schedule type not defined in config'
 
-    if not 'params' in config:
+    if 'params' not in config:
         return None, 'LR schedule params not defined in config'
 
     lr_schedule = config['type']
     lr_params = config['params']
 
-    if not lr_schedule in VALID_LR_SCHEDULES:
+    if lr_schedule not in VALID_LR_SCHEDULES:
         return None, '{} is not a valid LR schedule'.format(lr_schedule)
 
     if lr_schedule == LR_RANGE_TEST:
@@ -355,9 +352,7 @@ class LRRangeTest(object):
 
         self.optimizer = get_torch_optimizer(optimizer)
 
-        if isinstance(lr_range_test_min_lr,
-                      list) or isinstance(lr_range_test_min_lr,
-                                          tuple):
+        if isinstance(lr_range_test_min_lr, (list, tuple)):
             if len(lr_range_test_min_lr) != len(self.optimizer.param_groups):
                 raise ValueError("expected {} lr_range_test_min_lr, got {}".format(
                     len(self.optimizer.param_groups),
@@ -600,12 +595,11 @@ class OneCycle(object):
         batch_iteration = (self.last_batch_iteration + 1)
         cycle = math.floor(1 + batch_iteration / self.total_size)
         x = 1. + batch_iteration / self.total_size - cycle
-        if x <= self.step_ratio:
-            scale_factor = x / self.step_ratio
-        else:
-            scale_factor = (x - 1) / (self.step_ratio - 1)
-
-        return scale_factor
+        return (
+            x / self.step_ratio
+            if x <= self.step_ratio
+            else (x - 1) / (self.step_ratio - 1)
+        )
 
     def _get_cycle_mom(self):
         scale_factor = self._get_scale_factor()
@@ -634,9 +628,7 @@ class OneCycle(object):
 
         decay_interval = decay_batch_iteration / self.decay_step_size
         mom_decay_factor = (1 + self.decay_mom_rate * decay_interval)
-        momentums = [(beta0 * mom_decay_factor, beta1) for beta0, beta1 in self.max_moms]
-
-        return momentums
+        return [(beta0 * mom_decay_factor, beta1) for beta0, beta1 in self.max_moms]
 
     def _get_decay_lr(self, decay_batch_iteration):
         """Calculates the learning rate at batch index. This function is used
@@ -648,9 +640,7 @@ class OneCycle(object):
 
         decay_interval = decay_batch_iteration / self.decay_step_size
         lr_decay_factor = (1 + self.decay_lr_rate * decay_interval)
-        lrs = [cycle_min_lr / lr_decay_factor for cycle_min_lr in self.min_lrs]
-
-        return lrs
+        return [cycle_min_lr / lr_decay_factor for cycle_min_lr in self.min_lrs]
 
     def get_lr(self):
         """Calculates the learning rate at batch index. This function treats
@@ -789,7 +779,7 @@ class WarmupLR(object):
         return 1.0
 
     def _format_param(self, optimizer, param_value, param_name):
-        if isinstance(param_value, list) or isinstance(param_value, tuple):
+        if isinstance(param_value, (list, tuple)):
             if len(param_value) != len(optimizer.param_groups):
                 raise ValueError("expected {} value for {}, got {}".format(
                     len(optimizer.param_groups),
