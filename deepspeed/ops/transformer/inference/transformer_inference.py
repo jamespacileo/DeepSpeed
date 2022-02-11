@@ -141,10 +141,7 @@ class DeepSpeedSelfAttentionFunction(Function):
             new_x_shape = x.size()[:-1] + (num_attention_heads_per_partition,
                                            attention_head_size)
             x_1 = x.view(*new_x_shape)
-            if key:
-                x_1 = x_1.permute(0, 2, 3, 1)
-            else:
-                x_1 = x_1.permute(0, 2, 1, 3)
+            x_1 = x_1.permute(0, 2, 3, 1) if key else x_1.permute(0, 2, 1, 3)
             if reshape:
                 return x_1.reshape(x.shape)
             return x_1
@@ -376,7 +373,7 @@ class DeepSpeedSelfAttention(nn.Module):
                 output_attentions=False,
                 norm_w=None,
                 norm_b=None):
-        output = DeepSpeedSelfAttentionFunction.apply(
+        return DeepSpeedSelfAttentionFunction.apply(
             input,
             input_mask,
             head_mask,
@@ -400,8 +397,6 @@ class DeepSpeedSelfAttention(nn.Module):
             self.q_groups,
             self.merge_count,
             self.qkv_merging)
-
-        return output
 
 
 class DeepSpeedMLPFunction(Function):
@@ -444,27 +439,26 @@ class DeepSpeedMLPFunction(Function):
                                                               q_scales[3],
                                                               q_groups,
                                                               (merge_count))
+        elif attn_nw is None:
+            output = fused_gemm_gelu(input,
+                                     inter_w,
+                                     inter_b,
+                                     output_w,
+                                     config.epsilon,
+                                     config.pre_layer_norm,
+                                     False)
         else:
-            if attn_nw is None:
-                output = fused_gemm_gelu(input,
-                                         inter_w,
-                                         inter_b,
-                                         output_w,
-                                         config.epsilon,
-                                         config.pre_layer_norm,
-                                         False)
-            else:
-                (intermediate,
-                 residual_add) = mlp_gemm_func(input,
-                                               residual,
-                                               bias,
-                                               inter_w,
-                                               inter_b,
-                                               attn_nw,
-                                               attn_nb,
-                                               config.epsilon,
-                                               config.pre_layer_norm)
-                output = vector_matmul_func(intermediate, output_w, False)
+            (intermediate,
+             residual_add) = mlp_gemm_func(input,
+                                           residual,
+                                           bias,
+                                           inter_w,
+                                           inter_b,
+                                           attn_nw,
+                                           attn_nb,
+                                           config.epsilon,
+                                           config.pre_layer_norm)
+            output = vector_matmul_func(intermediate, output_w, False)
 
         if mp_group is not None and dist.get_world_size(group=mp_group) > 1:
             dist.all_reduce(output, group=mp_group)

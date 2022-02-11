@@ -316,10 +316,7 @@ class DeepSpeedTransformerFunction(Function):
         if inp_size[1] % 16 != 0:
             output = torch.narrow(output, 1, 0, inp_size[1])
 
-        if config.return_tuple:
-            return (output, )  # outputs -> (output) : outputs[0] = output
-        else:
-            return output
+        return (output, ) if config.return_tuple else output
 
     @staticmethod
     def backward(ctx, grad_output):

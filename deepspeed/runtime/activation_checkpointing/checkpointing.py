@@ -62,28 +62,23 @@ cuda_device = None
 
 
 def detach_variable(inputs, device=None):
-    if isinstance(inputs, tuple):
-        out = []
-        for inp in inputs:
-            if not isinstance(inp, torch.Tensor):
-                out.append(inp)
-                continue
-
-            requires_grad = inp.requires_grad
-
-            if device is not None:
-                x = inp.to(device=device)
-            else:
-                x = inp
-
-            x = x.detach()
-            x.requires_grad = requires_grad
-            out.append(x)
-        return tuple(out)
-    else:
+    if not isinstance(inputs, tuple):
         raise RuntimeError(
             "Only tuple of tensors is supported. Got Unsupported input type: ",
             type(inputs).__name__)
+    out = []
+    for inp in inputs:
+        if not isinstance(inp, torch.Tensor):
+            out.append(inp)
+            continue
+
+        requires_grad = inp.requires_grad
+
+        x = inp.to(device=device) if device is not None else inp
+        x = x.detach()
+        x.requires_grad = requires_grad
+        out.append(x)
+    return tuple(out)
 
 
 def _set_cuda_rng_state(new_state, device=-1):
@@ -260,7 +255,7 @@ def gather_partitioned_activations(tensors, device=None):
     global mp_rank, mp_size, mp_group
     assert len(tensors) % 2 == 0, f'Expected even count of tensors, instead got {len(tensors)}'
     inputs = []
-    num_args = int(len(tensors) / 2)
+    num_args = len(tensors) // 2
     for i in range(num_args):
 
         item = tensors[2 * i]
@@ -439,8 +434,7 @@ def get_partitioned_activations_for_backward(args, inputs, contiguous_checkpoint
     for arg_index, (arg, inp) in enumerate(zip(args, inputs)):
         size = torch.tensor(arg.size()) if torch.is_tensor(arg) else None
         if not is_activation_to_checkpoint(arg):
-            new_args.append(arg)
-            new_args.append(size)
+            new_args.extend((arg, size))
             num_non_fp_tensors += 1
             continue
 
@@ -479,7 +473,7 @@ def get_partitioned_activations_for_backward(args, inputs, contiguous_checkpoint
 
 def get_cpu_activations_for_backward(args, inputs):
     new_args = []
-    for i, (arg, inp) in enumerate(zip(args, inputs)):
+    for arg, inp in zip(args, inputs):
         if not is_activation_to_checkpoint(arg):
             new_args.append(arg)
             continue
@@ -658,16 +652,13 @@ class CheckpointFunction(torch.autograd.Function):
             inputs = gather_partitioned_activations(
                 ctx.deepspeed_saved_tensors,
                 device=cuda_device if CPU_CHECKPOINT else None)
-            detached_inputs = detach_variable(inputs)
         elif CPU_CHECKPOINT:
             inputs = move_to_device(ctx.deepspeed_saved_tensors,
                                     cuda_device,
                                     is_activation_to_checkpoint)
-            detached_inputs = detach_variable(inputs)
         else:
             inputs = ctx.deepspeed_saved_tensors
-            detached_inputs = detach_variable(inputs)
-
+        detached_inputs = detach_variable(inputs)
         # Add non tensor input args
         detached_inputs = merge_tensors(tensor_objects=detached_inputs,
                                         non_tensor_objects=ctx.non_tensor_args,
@@ -746,10 +737,7 @@ def checkpoint(function, *args):
 
     all_outputs = []
     CheckpointFunction.apply(function, all_outputs, *args)
-    if len(all_outputs) == 1:
-        return all_outputs[0]
-    else:
-        return tuple(all_outputs)
+    return all_outputs[0] if len(all_outputs) == 1 else tuple(all_outputs)
 
 
 def partition_activations_in_checkpoint(partition_activation):
@@ -869,9 +857,7 @@ def configure(
     """
     global mpu, num_layers, deepspeed_checkpointing_enabled
 
-    global PARTITION_ACTIVATIONS, CONTIGUOUS_CHECKPOINTING, \
-        CPU_CHECKPOINT, SYNCHRONIZE, PROFILE_TIME
-
+    global PARTITION_ACTIVATIONS, CONTIGUOUS_CHECKPOINTING
     _configure_defaults()
 
     if mpu_ is not None:
@@ -900,7 +886,6 @@ def configure(
 
     if CONTIGUOUS_CHECKPOINTING:
         assert PARTITION_ACTIVATIONS, "Contiguous Checkpointing is only available with partitioned activations. Set partitioned activations to true in deepspeed config"
-    if CONTIGUOUS_CHECKPOINTING:
         assert num_layers is not None, "Must specify the number of layers with contiguous memory checkpointing"
 
 

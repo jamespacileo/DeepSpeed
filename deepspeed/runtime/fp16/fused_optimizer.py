@@ -132,10 +132,9 @@ class FP16_Optimizer(object):
             for p in group:
                 if set_grads_to_None:
                     p.grad = None
-                else:
-                    if p.grad is not None:
-                        p.grad.detach_()
-                        p.grad.zero_()
+                elif p.grad is not None:
+                    p.grad.detach_()
+                    p.grad.zero_()
 
     def step_fused_adam(self, closure=None):
         """
@@ -352,10 +351,9 @@ class FP16_Optimizer(object):
                         logger.info(
                             f"Increasing dynamic loss scale from {prev_scale} to {self.cur_scale}"
                         )
-        else:
-            if skip:
-                logger.info("Grad overflow on iteration: %s", self.cur_iter)
-                logger.info("Using static loss scale of: %s", self.cur_scale)
+        elif skip:
+            logger.info("Grad overflow on iteration: %s", self.cur_iter)
+            logger.info("Using static loss scale of: %s", self.cur_scale)
         self.cur_iter += 1
         return
 
@@ -389,10 +387,12 @@ class FP16_Optimizer(object):
             checkpoint['optimizer'] = optimizer.state_dict()
             torch.save(checkpoint, "saved.pth")
         """
-        state_dict = {}
-        state_dict['dynamic_loss_scale'] = self.dynamic_loss_scale
-        state_dict['cur_scale'] = self.cur_scale
-        state_dict['cur_iter'] = self.cur_iter
+        state_dict = {
+            'dynamic_loss_scale': self.dynamic_loss_scale,
+            'cur_scale': self.cur_scale,
+            'cur_iter': self.cur_iter,
+        }
+
         if state_dict['dynamic_loss_scale']:
             state_dict['last_overflow_iter'] = self.last_overflow_iter
             state_dict['scale_factor'] = self.scale_factor

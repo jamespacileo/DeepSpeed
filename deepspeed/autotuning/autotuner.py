@@ -80,20 +80,19 @@ class Autotuner:
             for key, val in best_space_records.items():
                 if not val:
                     continue
-                row = []
-                row.append(key)
+                row = [key]
                 num_exps = 0
                 if key == GLOBAL_TUNING_SPACE:
-                    cnt = 0
-                    for k, v in best_space_records.items():
-                        if k != GLOBAL_TUNING_SPACE:
-                            cnt += v[2]
+                    cnt = sum(
+                        v[2]
+                        for k, v in best_space_records.items()
+                        if k != GLOBAL_TUNING_SPACE
+                    )
+
                     num_exps = cnt
                 else:
                     num_exps = val[2]
-                row.append(num_exps)
-                row.append(val[1])
-                row.append(val[0]['name'])
+                row.extend((num_exps, val[1], val[0]['name']))
                 tab.append(row)
             summary = tabulate(tab,
                                headers=[
@@ -120,8 +119,9 @@ class Autotuner:
                 )
             else:
                 logger.info(
-                    f"No optimal setup is found. Please check that experiments were run successfully."
+                    'No optimal setup is found. Please check that experiments were run successfully.'
                 )
+
             tuning_duration = datetime.timedelta(seconds=(time.time() - self.start_time))
 
             logger.info(f"Tuning completed in {tuning_duration}")
@@ -204,16 +204,8 @@ class Autotuner:
         Returns:
             num_nodes, num_gpus: the number of gpus and number of nodes used in the autotuning experiments
         """
-        if args.num_nodes > 0:
-            num_nodes = args.num_nodes
-        else:
-            num_nodes = len(self.rm.nodes)
-
-        if args.num_gpus > 0:
-            num_gpus = args.num_gpus
-        else:
-            num_gpus = self.rm.num_gpus_per_node
-
+        num_nodes = args.num_nodes if args.num_nodes > 0 else len(self.rm.nodes)
+        num_gpus = args.num_gpus if args.num_gpus > 0 else self.rm.num_gpus_per_node
         return num_nodes, num_gpus
 
     def metric(self):
@@ -229,15 +221,13 @@ class Autotuner:
         return self.autotuning_config.mp_size
 
     def max_train_micro_batch_size_per_gpu(self):
-        if self.max_train_batch_size() and self.max_train_batch_size(
-        ) > 0:  # if the user specifies a max_train_batch_size
-            max_train_micro_batch_size = self.max_train_batch_size() * self.mp_size(
-            ) // (self.exp_num_gpus * self.exp_num_nodes
-                  )  # gradient accumulation steps >=1
-            return min(self.autotuning_config.max_train_micro_batch_size_per_gpu,
-                       max_train_micro_batch_size)
-        else:
+        if not self.max_train_batch_size() or self.max_train_batch_size() <= 0:
             return self.autotuning_config.max_train_micro_batch_size_per_gpu
+        max_train_micro_batch_size = self.max_train_batch_size() * self.mp_size(
+        ) // (self.exp_num_gpus * self.exp_num_nodes
+              )  # gradient accumulation steps >=1
+        return min(self.autotuning_config.max_train_micro_batch_size_per_gpu,
+                   max_train_micro_batch_size)
 
     def min_train_micro_batch_size_per_gpu(self):
         return self.autotuning_config.min_train_micro_batch_size_per_gpu
@@ -280,9 +270,7 @@ class Autotuner:
         if zero_stage >= ZERO_OPTIMIZATION_WEIGHTS:
             params_mem = params_mem / total_gpus
 
-        mem_per_gpu = (params_mem + gradients_mem + optimizer_mem) / self.mp_size()
-
-        return mem_per_gpu
+        return (params_mem + gradients_mem + optimizer_mem) / self.mp_size()
 
     def _generate_experiments(self, tuning_space, max_train_batch_size_per_gpu):
         """Generates a list of autotuning experiments given a tuning_space.
@@ -366,9 +354,7 @@ class Autotuner:
             # fill the template with the expr config
             replace_dict(exp_config, config)
 
-            # if the config does not use offloading, remove the offloading section
-            config_zero = config.get(ZERO_OPTIMIZATION, None)
-            if config_zero:
+            if config_zero := config.get(ZERO_OPTIMIZATION, None):
                 if OFFLOAD_OPTIMIZER not in config_zero and OFFLOAD_OPTIMIZER in exp_config[
                         ZERO_OPTIMIZATION]:
                     del exp_config[ZERO_OPTIMIZATION][OFFLOAD_OPTIMIZER]
@@ -382,13 +368,15 @@ class Autotuner:
             exp_config[GRADIENT_ACCUMULATION_STEPS] = gas
             exp_config[TRAIN_BATCH_SIZE] = mbs * gas * \
                 self.exp_num_gpus * self.exp_num_nodes // self.mp_size()
-            exp = {}
             # generate the expr name
             exp_name = canonical_name(exp_config, tuning_keys, prefix)
-            exp['name'] = exp_name
-            exp[DS_CONFIG] = exp_config
-            exp['num_gpus'] = self.exp_num_gpus
-            exp['num_nodes'] = self.exp_num_nodes
+            exp = {
+                'name': exp_name,
+                DS_CONFIG: exp_config,
+                'num_gpus': self.exp_num_gpus,
+                'num_nodes': self.exp_num_nodes,
+            }
+
             exps.append(exp)
 
         return exps
@@ -398,11 +386,9 @@ class Autotuner:
         """
         self.start_time = time.time()
         if self.fast_enabled():
-            logger.info(f"Fast mode is enabled. Tuning micro batch size only.")
+            logger.info('Fast mode is enabled. Tuning micro batch size only.')
 
-        # model info profile run with DEFAULT_MIN_MEM_CONFIG
-        model_info = self.model_info_profile_run()
-        if model_info:
+        if model_info := self.model_info_profile_run():
             self.model_info = model_info
         else:
             return
@@ -585,12 +571,14 @@ class Autotuner:
             return max_micro_batch_size, fast_best_mbs, fast_best_metric_val
 
         # if the best metric or the micro batch size for that best metric in the current Zero stage after tuning micro batch size is less than the corresponding value in the previous Zero stage, return, do not tune other Zero configuration parameters
-        if stage > 0:
-            if fast_best_mbs <= prev_best_mbs or fast_best_metric_val < prev_best_metric_val:
-                logger.info(
-                    f"End tuning for space: {tuning_space_name}. No need to tune other Zero configuration parameters."
-                )
-                return max_micro_batch_size, fast_best_mbs, fast_best_metric_val
+        if stage > 0 and (
+            fast_best_mbs <= prev_best_mbs
+            or fast_best_metric_val < prev_best_metric_val
+        ):
+            logger.info(
+                f"End tuning for space: {tuning_space_name}. No need to tune other Zero configuration parameters."
+            )
+            return max_micro_batch_size, fast_best_mbs, fast_best_metric_val
 
         tuning_space[TRAIN_MICRO_BATCH_SIZE_PER_GPU] = tuning_micro_batch_sizes
         tuning_space_name = canonical_name(tuning_space,
@@ -648,14 +636,13 @@ class Autotuner:
             if prev_metric_val:
                 if metric_val < prev_metric_val:
                     break
-                if (metric_val >= prev_metric_val
-                        and (metric_val - prev_metric_val) / prev_metric_val <
-                        METRIC_PERCENT_DIFF_CONST):
+                if (
+                    metric_val - prev_metric_val
+                ) / prev_metric_val < METRIC_PERCENT_DIFF_CONST:
                     break
             prev_metric_val = metric_val
             prev_micro_batch_size = exp[DS_CONFIG][TRAIN_MICRO_BATCH_SIZE_PER_GPU]
-        plateau_mbs = prev_micro_batch_size
-        return plateau_mbs
+        return prev_micro_batch_size
 
     def get_model_num_params(self):
         if self.model_info and "num_params" in self.model_info:
@@ -686,12 +673,14 @@ class Autotuner:
             }
         }
 
-        exp_config = {}
         exp_name = "profile_model_info"
-        exp_config['name'] = exp_name
-        exp_config[DS_CONFIG] = ds_config
-        exp_config['num_gpus'] = self.exp_num_gpus
-        exp_config['num_nodes'] = self.exp_num_nodes
+        exp_config = {
+            'name': exp_name,
+            DS_CONFIG: ds_config,
+            'num_gpus': self.exp_num_gpus,
+            'num_nodes': self.exp_num_nodes,
+        }
+
         exp_path = os.path.join(self.exps_dir, f'{exp_name}.json')
 
         with open(exp_path, 'w', buffering=BUFSIZE) as fd:
@@ -738,8 +727,7 @@ class Autotuner:
         best_space_records = {}
         global_best_record = None
         for space_name, space_records in self.records.items():
-            best_space_record = self.get_best_space_record(space_name)
-            if best_space_record:
+            if best_space_record := self.get_best_space_record(space_name):
                 best_space_records[space_name] = best_space_record
                 if not global_best_record or best_space_record[1] > global_best_record[1]:
                     global_best_record = best_space_record

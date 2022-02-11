@@ -38,12 +38,10 @@ class WeightQuantization(object):
                                                    merge_count=len(value_list)):
             groups *= 2
         q_scale = []
-        index = 0
-        for data in value_list:
+        for index, data in enumerate(value_list):
             data_int, data_scale = self.quantize_data(data, quantize_bits, groups, key)
             q_scale.append(data_scale)
             value_list[index] = data_int
-            index += 1
         q_scale = (1 / torch.cat(q_scale,
                                  dim=merge_dim).to(
                                      torch.cuda.current_device()).view(-1).unsqueeze(0))
@@ -58,7 +56,7 @@ class WeightQuantization(object):
         return value_list
 
     def merge_layer_scales(self, layer_scales):
-        max_dim = max([s.shape[-1] for s in layer_scales])
+        max_dim = max(s.shape[-1] for s in layer_scales)
         layer_scales = [
             torch.cat((s,
                        torch.zeros((1,
@@ -69,14 +67,18 @@ class WeightQuantization(object):
         return torch.cat(layer_scales).unsqueeze(0)
 
     def merge_scales(self):
-        all_scales = []
-        for dense_scale, qkv_scale, m4hh_scale, mh4h_scale in \
-            zip(self.dense_scales, self.qkv_scales, self.mlp4hh_scales, self.mlph4h_scales):
-            all_scales.append(
-                self.merge_layer_scales([qkv_scale,
-                                         dense_scale,
-                                         mh4h_scale,
-                                         m4hh_scale]))
+        all_scales = [
+            self.merge_layer_scales(
+                [qkv_scale, dense_scale, mh4h_scale, m4hh_scale]
+            )
+            for dense_scale, qkv_scale, m4hh_scale, mh4h_scale in zip(
+                self.dense_scales,
+                self.qkv_scales,
+                self.mlp4hh_scales,
+                self.mlph4h_scales,
+            )
+        ]
+
         return torch.cat(all_scales)
 
     def merge_scales_split(self, split_count):
@@ -126,14 +128,20 @@ class WeightQuantization(object):
             keys = [qkvw, dense_w, _h4h_w, _4hh_w]
             layer_scales = []
 
-            for key in range(len(keys)):
-                if self.mlp_extra_grouping and is_mlp(keys[key]):
-                    data_quantized, data_scale = self.quantize_data(keys[key], quantize_bits, groups * 2)
-                elif policy_cls is HFBertLayerPolicy and self.is_qkv(keys[key]):
-                    data_quantized, data_scale = self.quantize_data(keys[key], quantize_bits, groups * 3)
+            for key_ in keys:
+                if self.mlp_extra_grouping and is_mlp(key_):
+                    data_quantized, data_scale = self.quantize_data(
+                        key_, quantize_bits, groups * 2
+                    )
+
+                elif policy_cls is HFBertLayerPolicy and self.is_qkv(key_):
+                    data_quantized, data_scale = self.quantize_data(
+                        key_, quantize_bits, groups * 3
+                    )
+
                 else:
-                    data_quantized, data_scale = self.quantize_data(keys[key], quantize_bits, groups)
-                keys[key].copy_(data_quantized)
+                    data_quantized, data_scale = self.quantize_data(key_, quantize_bits, groups)
+                key_.copy_(data_quantized)
                 layer_scales.append(
                     (1 /
                      data_scale.to(torch.cuda.current_device()).view(-1).unsqueeze(0)))

@@ -84,12 +84,11 @@ def get_curriculum_enabled(param_dict):
 
 
 def get_curriculum_params(param_dict):
-    if CURRICULUM_LEARNING in param_dict.keys():
-        curriculum_params = copy.copy(param_dict[CURRICULUM_LEARNING])
-        curriculum_params.pop(CURRICULUM_ENABLED)
-        return curriculum_params
-    else:
+    if CURRICULUM_LEARNING not in param_dict.keys():
         return False
+    curriculum_params = copy.copy(param_dict[CURRICULUM_LEARNING])
+    curriculum_params.pop(CURRICULUM_ENABLED)
+    return curriculum_params
 
 
 def get_pld_enabled(param_dict):
@@ -102,12 +101,11 @@ def get_pld_enabled(param_dict):
 
 
 def get_pld_params(param_dict):
-    if PROGRESSIVE_LAYER_DROP in param_dict.keys():
-        pld_params = copy.copy(param_dict[PROGRESSIVE_LAYER_DROP])
-        pld_params.pop(PLD_ENABLED)
-        return pld_params
-    else:
+    if PROGRESSIVE_LAYER_DROP not in param_dict.keys():
         return False
+    pld_params = copy.copy(param_dict[PROGRESSIVE_LAYER_DROP])
+    pld_params.pop(PLD_ENABLED)
+    return pld_params
 
 
 def get_amp_enabled(param_dict):
@@ -118,12 +116,11 @@ def get_amp_enabled(param_dict):
 
 
 def get_amp_params(param_dict):
-    if AMP in param_dict.keys():
-        amp_params = copy.copy(param_dict[AMP])
-        amp_params.pop(AMP_ENABLED)
-        return amp_params
-    else:
+    if AMP not in param_dict.keys():
         return False
+    amp_params = copy.copy(param_dict[AMP])
+    amp_params.pop(AMP_ENABLED)
+    return amp_params
 
 
 def get_fp16_enabled(param_dict):
@@ -134,12 +131,16 @@ def get_fp16_enabled(param_dict):
 
 
 def get_bfloat16_enabled(param_dict):
-    for key in [BFLOAT16, BFLOAT16_OLD]:
-        if key in param_dict.keys():
-            return get_scalar_param(param_dict[key],
-                                    BFLOAT16_ENABLED,
-                                    BFLOAT16_ENABLED_DEFAULT)
-    return False
+    return next(
+        (
+            get_scalar_param(
+                param_dict[key], BFLOAT16_ENABLED, BFLOAT16_ENABLED_DEFAULT
+            )
+            for key in [BFLOAT16, BFLOAT16_OLD]
+            if key in param_dict.keys()
+        ),
+        False,
+    )
 
 
 def get_fp16_master_weights_and_grads_enabled(param_dict):
@@ -343,26 +344,24 @@ def get_gradient_clipping(param_dict):
 
 
 def get_sparse_attention(param_dict):
-    if SPARSE_ATTENTION in param_dict.keys():
-        sparsity = param_dict[SPARSE_ATTENTION]
-        mode = get_sparse_attention_mode(sparsity)
-
-        if mode == SPARSE_DENSE_MODE:
-            return get_sparse_dense_config(sparsity)
-        elif mode == SPARSE_FIXED_MODE:
-            return get_sparse_fixed_config(sparsity)
-        elif mode == SPARSE_VARIABLE_MODE:
-            return get_sparse_variable_config(sparsity)
-        elif mode == SPARSE_BIGBIRD_MODE:
-            return get_sparse_bigbird_config(sparsity)
-        elif mode == SPARSE_BSLONGFORMER_MODE:
-            return get_sparse_bslongformer_config(sparsity)
-        else:
-            raise NotImplementedError(
-                f"Given sparsity mode, {mode}, has not been implemented yet!")
-
-    else:
+    if SPARSE_ATTENTION not in param_dict.keys():
         return None
+    sparsity = param_dict[SPARSE_ATTENTION]
+    mode = get_sparse_attention_mode(sparsity)
+
+    if mode == SPARSE_DENSE_MODE:
+        return get_sparse_dense_config(sparsity)
+    elif mode == SPARSE_FIXED_MODE:
+        return get_sparse_fixed_config(sparsity)
+    elif mode == SPARSE_VARIABLE_MODE:
+        return get_sparse_variable_config(sparsity)
+    elif mode == SPARSE_BIGBIRD_MODE:
+        return get_sparse_bigbird_config(sparsity)
+    elif mode == SPARSE_BSLONGFORMER_MODE:
+        return get_sparse_bslongformer_config(sparsity)
+    else:
+        raise NotImplementedError(
+            f"Given sparsity mode, {mode}, has not been implemented yet!")
 
 
 def get_sparse_dense_config(sparsity):

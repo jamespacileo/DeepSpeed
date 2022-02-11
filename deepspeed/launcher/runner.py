@@ -212,7 +212,7 @@ def parse_resource_filter(host_info, include_str="", exclude_str=""):
         return host_info
 
     # Either build from scratch or remove items
-    filtered_hosts = dict()
+    filtered_hosts = {}
     if include_str:
         parse_str = include_str
     if exclude_str != "":
@@ -286,8 +286,7 @@ def parse_inclusion_exclusion(resource_pool, inclusion, exclusion):
 
 def encode_world_info(world_info):
     world_info_json = json.dumps(world_info).encode('utf-8')
-    world_info_base64 = base64.urlsafe_b64encode(world_info_json).decode('utf-8')
-    return world_info_base64
+    return base64.urlsafe_b64encode(world_info_json).decode('utf-8')
 
 
 def run_autotuning(args, active_resources):
@@ -322,9 +321,10 @@ def main(args=None):
             print(f"{detected_str}: setting --include={args.include}")
         del os.environ["CUDA_VISIBLE_DEVICES"]
 
-    if args.num_nodes >= 0 or args.num_gpus >= 0:
-        if args.include != "" or args.exclude != "":
-            raise ValueError("Cannot specify num_nodes/gpus with include/exclude")
+    if (args.num_nodes >= 0 or args.num_gpus >= 0) and (
+        args.include != "" or args.exclude != ""
+    ):
+        raise ValueError("Cannot specify num_nodes/gpus with include/exclude")
 
     multi_node_exec = True
     if not resource_pool:
@@ -407,13 +407,13 @@ def main(args=None):
 
         curr_path = os.path.abspath('.')
         if 'PYTHONPATH' in env:
-            env['PYTHONPATH'] = curr_path + ":" + env['PYTHONPATH']
+            env['PYTHONPATH'] = f'{curr_path}:{env["PYTHONPATH"]}'
         else:
             env['PYTHONPATH'] = curr_path
 
         exports = ""
         for var in env.keys():
-            if any([var.startswith(name) for name in EXPORT_ENVS]):
+            if any(var.startswith(name) for name in EXPORT_ENVS):
                 runner.add_export(var, env[var])
 
         for environ_path in DEEPSPEED_ENVIRONMENT_PATHS:

@@ -26,9 +26,7 @@ MIN_LOSS_SCALE = 'min_scale'
 
 # item() is a recent addition, so this helps with backward compatibility.
 def to_python_float(t):
-    if hasattr(t, 'item'):
-        return t.item()
-    return t[0]
+    return t.item() if hasattr(t, 'item') else t[0]
 
 
 class LossScalerBase:
@@ -120,11 +118,10 @@ class DynamicLossScaler(LossScalerBase):
 
     # `params` is a list / generator of torch.Variable
     def has_overflow_serial(self, params):
-        for p in params:
-            if p.grad is not None and self._has_inf_or_nan(p.grad.data):
-                return True
-
-        return False
+        return any(
+            p.grad is not None and self._has_inf_or_nan(p.grad.data)
+            for p in params
+        )
 
     # `x` is a torch.Tensor
     def _has_inf_or_nan(x):
@@ -143,9 +140,7 @@ class DynamicLossScaler(LossScalerBase):
                 raise
             return True
         else:
-            if cpu_sum in [float('inf'), -float('inf')] or cpu_sum != cpu_sum:
-                return True
-            return False
+            return cpu_sum in [float('inf'), -float('inf')]
 
     # `overflow` is boolean indicating whether the gradient overflowed
     def update_scale(self, overflow):

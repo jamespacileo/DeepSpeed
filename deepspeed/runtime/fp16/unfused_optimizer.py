@@ -115,10 +115,9 @@ class FP16_UnfusedOptimizer(object):
             for p in group:
                 if set_grads_to_None:
                     p.grad = None
-                else:
-                    if p.grad is not None:
-                        p.grad.detach_()
-                        p.grad.zero_()
+                elif p.grad is not None:
+                    p.grad.detach_()
+                    p.grad.zero_()
 
     def step_fused_lamb(self, closure=None):
         """
@@ -129,7 +128,7 @@ class FP16_UnfusedOptimizer(object):
         grads_groups = []
         norm_groups = []
         expert_norm_groups = []
-        for i, group in enumerate(self.fp16_groups):
+        for group in self.fp16_groups:
             grads = [
                 torch.zeros(p.size(),
                             dtype=p.dtype,
@@ -172,8 +171,7 @@ class FP16_UnfusedOptimizer(object):
                             scale=combined_scale)
 
         for fp32_group, fp16_group in zip(self.fp32_groups, self.fp16_groups):
-            for idx, (fp32_param, fp16_param) in enumerate(zip(fp32_group, fp16_group)):
-
+            for fp32_param, fp16_param in zip(fp32_group, fp16_group):
                 #remove the fp32 grad
                 fp32_param.grad = None
 
@@ -225,8 +223,7 @@ class FP16_UnfusedOptimizer(object):
         self.optimizer.step()
 
         for fp32_group, fp16_group in zip(self.fp32_groups, self.fp16_groups):
-            for idx, (fp32_param, fp16_param) in enumerate(zip(fp32_group, fp16_group)):
-
+            for fp32_param, fp16_param in zip(fp32_group, fp16_group):
                 #remove the fp32 grad
                 fp32_param.grad = None
 
@@ -287,10 +284,9 @@ class FP16_UnfusedOptimizer(object):
                         logger.info(
                             f"Increasing dynamic loss scale from {prev_scale} to {self.cur_scale}"
                         )
-        else:
-            if skip:
-                logger.info("Grad overflow on iteration %s", self.cur_iter)
-                logger.info("Using static loss scale of %s", self.cur_scale)
+        elif skip:
+            logger.info("Grad overflow on iteration %s", self.cur_iter)
+            logger.info("Using static loss scale of %s", self.cur_scale)
         self.cur_iter += 1
         return
 
@@ -324,10 +320,12 @@ class FP16_UnfusedOptimizer(object):
             checkpoint['optimizer'] = optimizer.state_dict()
             torch.save(checkpoint, "saved.pth")
         """
-        state_dict = {}
-        state_dict['dynamic_loss_scale'] = self.dynamic_loss_scale
-        state_dict['cur_scale'] = self.cur_scale
-        state_dict['cur_iter'] = self.cur_iter
+        state_dict = {
+            'dynamic_loss_scale': self.dynamic_loss_scale,
+            'cur_scale': self.cur_scale,
+            'cur_iter': self.cur_iter,
+        }
+
         if state_dict['dynamic_loss_scale']:
             state_dict['last_overflow_iter'] = self.last_overflow_iter
             state_dict['scale_factor'] = self.scale_factor
@@ -391,13 +389,13 @@ class FP16_UnfusedOptimizer(object):
         return repr(self.optimizer)
 
     def initialize_optimizer_states(self):
-        for i, group in enumerate(self.fp16_groups):
+        for group in self.fp16_groups:
             for param in group:
                 param.grad = torch.zeros(param.size(),
                                          dtype=param.dtype,
                                          device=torch.cuda.current_device())
 
-        for i, group in enumerate(self.fp32_groups):
+        for group in self.fp32_groups:
             for param in group:
                 param.grad = torch.zeros(param.size(),
                                          dtype=param.dtype,
@@ -405,10 +403,10 @@ class FP16_UnfusedOptimizer(object):
 
         self.optimizer.step()
 
-        for i, group in enumerate(self.fp16_groups):
+        for group in self.fp16_groups:
             for param in group:
                 param.grad = None
 
-        for i, group in enumerate(self.fp32_groups):
+        for group in self.fp32_groups:
             for param in group:
                 param.grad = None

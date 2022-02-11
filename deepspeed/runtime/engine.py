@@ -2,6 +2,7 @@
 Copyright 2019 The Microsoft DeepSpeed Team
 """
 
+
 import os
 import re
 import stat
@@ -80,7 +81,6 @@ try:
 except ImportError:
     # Fail silently so we don't spam logs unnecessarily if user isn't using amp
     APEX_INSTALLED = False
-    pass
 
 
 def split_half_float_double_sparse(tensors):
@@ -96,10 +96,12 @@ def split_half_float_double_sparse(tensors):
         assert t.type() in supported_types, f"attempting to reduce an unsupported grad type: {t.type()}"
 
     buckets = []
-    for i, dtype in enumerate(supported_types):
-        bucket = [t for t in tensors if t.type() == dtype]
-        if bucket:
-            buckets.append((dtype, bucket))
+    buckets.extend(
+        (dtype, bucket)
+        for dtype in supported_types
+        if (bucket := [t for t in tensors if t.type() == dtype])
+    )
+
     return buckets
 
 
